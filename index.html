@@ -66,7 +66,8 @@
   .target-label-en{font-family:'Fredoka One',cursive;font-size:11px;color:#ddd;text-align:center;margin-bottom:4px;}
 
   .target-area{width:100%;background:white;border-radius:16px;padding:7px 12px;box-shadow:0 3px 10px rgba(0,0,0,0.07);margin-bottom:6px;}
-  .target-label{font-family:'Fredoka One',cursive;font-size:13px;color:#bbb;text-align:center;margin-bottom:4px;}
+  .target-label{font-family:'Fredoka One',cursive;font-size:13px;color:#bbb;text-align:center;margin-bottom:4px;transition:font-size 0.2s,color 0.2s;}
+  .target-label.main-instruction{font-size:18px;color:#9B2FAB;margin-bottom:2px;}
   .cat-hint{font-family:'Fredoka One',cursive;font-size:13px;background:linear-gradient(135deg,#FFD93D,#FF9A6C);color:white;border-radius:10px;padding:2px 10px;text-align:center;margin-bottom:4px;display:inline-block;}
   .target-food{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;}
   .target-item{font-size:clamp(22px,7vw,34px);background:linear-gradient(135deg,#FFF0F8,#F0E8FF);border-radius:13px;padding:5px 9px;border:3px solid var(--pink);animation:pulseTarget 2s ease-in-out infinite;}
@@ -323,7 +324,8 @@ var EMOJI_NAMES = {
   '🧅':'onion','🧄':'garlic','🥬':'lettuce','🫑':'pepper',
   '🥒':'cucumber','🍆':'eggplant','🥔':'potato','🌶️':'chili',
   '🍔':'burger','🌭':'hotdog','🍟':'fries','🥪':'sandwich',
-  '🌮':'taco','🍿':'popcorn','🧀':'cheese'
+  '🌮':'taco','🍿':'popcorn','🧀':'cheese',
+  '🥤':'drink','🍢':'skewer','🫒':'olive','🧃':'juice box'
 };
 
 function speakInstruction(roundData) {
@@ -469,9 +471,10 @@ var CORRECT_MSGS=['Yummy! 😋','Delicious! 🤩','Well done! 🌟','True prince
 var WRONG_MSGS=['Not that one... 🤔','Try again! 💕','Oops! 😅','Oh no! 🙈'];
 var HUNGER_MSGS=['I am hungry! 🍽️','Bring me something sweet! 🍭','Hmm... I want to eat! 😋','Where is the food?! 👸','What is there to eat? 🤤'];
 
-var score=0,lives=3,round=0,roundData=null;
+var score=0,round=0,roundData=null;
 var selectedItems={},gameOver=false,currentDiff=1;
 var timerInterval=null,timerLeft=0,timerSecs=15;
+var attemptsThisRound=0;
 
 function shuffle(arr){return arr.slice().sort(function(){return Math.random()-0.5;});}
 
@@ -485,7 +488,7 @@ function showDiffMenu(){playTap();speakWelcome();showScreen('diffMenu');}
 
 
 function startGame(diff){
-  currentDiff=diff;score=0;lives=3;round=0;gameOver=false;
+  currentDiff=diff;score=0;round=0;gameOver=false;
   ROUNDS[diff] = buildRounds(diff);
   showScreen('game');playStart();nextRound();
 }
@@ -495,6 +498,7 @@ function nextRound(){
   if(round>=rounds.length){endGame();return;}
   roundData=rounds[round];
   selectedItems={};
+  attemptsThisRound=0;
 
   document.getElementById('scoreDisplay').textContent=score;
   document.getElementById('levelBadge').textContent=DIFF_NAMES[currentDiff]+' '+(round+1)+'/'+rounds.length;
@@ -506,21 +510,35 @@ function nextRound(){
   // Category hint (diff 5)
   var catHint=document.getElementById('catHint');
   var targetLabel=document.getElementById('targetLabel');
-  if(currentDiff===5&&roundData.catHelp){
+  var targetEl=document.getElementById('targetFood');
+
+  if(currentDiff===1){
+    // LEVEL 1 ONLY: show visual emoji preview of target(s)
+    catHint.style.display='none';
+    targetLabel.classList.remove('main-instruction');
+    document.getElementById('targetLabel').textContent='Noa wants to eat:';
+    targetEl.innerHTML=roundData.targets.map(function(t){
+      var id='ti_'+encodeURIComponent(t);
+      return '<div class="target-item" id="'+id+'">'+t+'</div>';
+    }).join('');
+  } else if(currentDiff===5&&roundData.catHelp){
+    // Master level: text-only category instruction, no preview
     catHint.style.display='inline-block';
     catHint.textContent=roundData.catHelp;
-    setTargetLabel('בחרי את כל ה'+roundData.cat+':','Pick all the '+roundData.cat+' items:');
+    targetLabel.classList.remove('main-instruction');
+    document.getElementById('targetLabel').textContent='';
+    targetEl.innerHTML='';
   } else {
+    // Levels 2-4: text-only instruction, no visual preview
     catHint.style.display='none';
-    document.getElementById('targetLabel').textContent='Noa wants to eat:';
+    targetLabel.classList.add('main-instruction');
+    var names=roundData.targets.map(function(t){ return EMOJI_NAMES[t]||'food'; });
+    var listText;
+    if(names.length===1){ listText='the '+names[0]; }
+    else { listText=names.slice(0,-1).join(', ')+' and the '+names[names.length-1]; }
+    document.getElementById('targetLabel').textContent='Find '+listText+'!';
+    targetEl.innerHTML='';
   }
-
-  // Targets
-  var targetEl=document.getElementById('targetFood');
-  targetEl.innerHTML=roundData.targets.map(function(t){
-    var id='ti_'+encodeURIComponent(t);
-    return '<div class="target-item" id="'+id+'">'+t+'</div>';
-  }).join('');
 
   // Grid
   var grid=document.getElementById('foodGrid');
@@ -567,13 +585,19 @@ function clearTimer(){
 
 function timeOut(){
   if(gameOver)return;
-  lives=Math.max(0,lives-1);updateLives();playTimerOut();
+  attemptsThisRound++;
+  updateLives();
+  playTimerOut();
   speakTimerOut();
   setBubble('Time has passed! ⏰','Time has passed! ⏰');
   document.getElementById('princessImg').className='princess-img sad';
   spawnBigEmoji('⏰');
-  if(lives===0){setTimeout(function(){endGame();},900);}
-  else{round++;setTimeout(function(){nextRound();},1100);}
+  // Restart timer for same round - give another chance, never end game
+  setTimeout(function(){
+    document.getElementById('princessImg').className='princess-img';
+    setBubble(HUNGER_MSGS[round%HUNGER_MSGS.length], HUNGER_MSGS_EN[round%HUNGER_MSGS_EN.length]);
+    if(currentDiff===5&&roundData.timer){ startTimer(roundData.timer); }
+  },1100);
 }
 
 function selectFood(el,food){
@@ -595,8 +619,11 @@ function selectFood(el,food){
     var allFound=roundData.targets.every(function(t){return selectedItems[t];});
     if(allFound){
       clearTimer();
-      var bonus=Math.max(1,lives)*currentDiff;
-      score+=10*bonus;
+      // Scoring: full points only if solved within 2 attempts (0 or 1 wrong tries),
+      // reduced (but never zero) points if it took longer. Game never stops.
+      var multiplier = attemptsThisRound <= 1 ? 1 : (attemptsThisRound <= 3 ? 0.6 : 0.3);
+      var bonus = Math.round(10 * currentDiff * multiplier);
+      score += Math.max(2, bonus);
       document.getElementById('scoreDisplay').textContent=score;
       var ci=Math.floor(Math.random()*CORRECT_MSGS.length); setBubble(CORRECT_MSGS[ci], CORRECT_MSGS_EN[ci%CORRECT_MSGS_EN.length]);
       var p=document.getElementById('princessImg');
@@ -609,7 +636,10 @@ function selectFood(el,food){
       setTimeout(function(){nextRound();},1300);
     }
   } else {
-    lives=Math.max(0,lives-1);updateLives();
+    // Wrong pick: track attempt, give visual/audio feedback, but NEVER end the game.
+    // Child keeps tapping until they find the right answer(s).
+    attemptsThisRound++;
+    updateLives();
     el.classList.add('wrong-flash');
     playWrong();
     speakWrong();
@@ -621,12 +651,17 @@ function selectFood(el,food){
       document.getElementById('princessImg').className='princess-img';
       setBubble(HUNGER_MSGS[round%HUNGER_MSGS.length], HUNGER_MSGS_EN[round%HUNGER_MSGS_EN.length]);
     },700);
-    if(lives===0)setTimeout(function(){endGame();},900);
   }
 }
 
 function updateLives(){
-  document.getElementById('livesDisplay').textContent=[0,1,2].map(function(i){return i<lives?'❤️':'🩶';}).join('');
+  // Shows encouragement dots based on attempts this round (never triggers game over)
+  var icons;
+  if(attemptsThisRound===0) icons=['💖','💖','💖'];
+  else if(attemptsThisRound===1) icons=['💖','💖','🤍'];
+  else if(attemptsThisRound===2) icons=['💖','🤍','🤍'];
+  else icons=['🤍','🤍','🤍'];
+  document.getElementById('livesDisplay').textContent=icons.join('');
 }
 
 function showLevelBanner(txt){
